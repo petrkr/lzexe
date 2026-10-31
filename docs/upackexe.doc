@@ -1,0 +1,32 @@
+  Documentation pour:
+  	UPACKEXE.EXE version 1.00 (c) 1989 Fabrice BELLARD
+  
+  
+    Pour avoir d‚j… quelques informations,vous pouvez voir la documentation
+  de LZEXE.
+    
+    Ce programme comble un grand manque dans le domaine des compacteurs /
+  d‚compacteurs de fichiers EXE: Il permet de d‚compacter les fichiers EXE
+  compact‚s avec EXEPACK.EXE de Microsoft pour les recompacter ensuite avec
+  LZEXE, car les gains sont bien plus importants.
+    Les programmes reduits avec EXEPACK sont trŠs courant: pratiquement
+  tous les programmes faits avec MSC (microsoft C) sont compact‚s avec,
+  s–rement pour cacher le manque d'optimisation de ce dernier ! Mais l'
+  algorithme utilis‚, bien que trŠs rapide, ne peut pas ˆtre mesur‚ avec
+  celui de LZEXE, qui fait bien mieux.
+    
+    De plus, et c'est pourquoi j'ai fait ce d‚compacteur, EXEPACK compacte
+  la table de relocation du fichier EXE et la rend inaccessible … LZEXE qui
+  ne peut plus la compacter au maximum. Ainsi, les performances de LZEXE
+  sont un peu plus faibles.
+    
+    
+    Utilisation de UPACKEXE:
+    ------------------------
+    
+    syntaxe: UPACKEXE nomfichier[.EXE]
+    
+    o— "nomfichier" est le nom du fichier … d‚compacter. A la fin il est
+  renomm‚ en *.OLD. Le nouveau fichier EXE est cr‚e dans le r‚pertoire
+  courant sous le nom de UPACKEXE.TMP et est renomm‚ … la fin.
+
