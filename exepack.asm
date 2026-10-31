@@ -1,225 +1,191 @@
-; d‚compactage d'un fichier EXE
-; version 1.00 (c) 1989 Fabrice Bellard
-; … assembler avec A86.COM (mais c'est facile … assembler avec tasm ou masm
-; en modifiant quelques instructions
+; LZEXE-compatible 8086 EXE decompressor.
+; Original version Â© 1989 Fabrice Bellard.
+; NASM port Â© 2026 Petr Kracik.
+; A 14-byte private header precedes this code.
 
-STARTIP  equ word ptr [00h]
-STARTCS  equ word ptr [02h]
-STARTSP  equ word ptr [04h]
-STARTSS  equ word ptr [06h]
-; longueur de l'ensemble du programme lz
-LENLZ    equ word ptr [08h]
-DECALAGE equ word ptr [0Ah]
-LENPROG  equ word ptr [0Ch]
+bits 16
+org 0x0e
 
-; macro pour prendre un bit
-GETBIT macro
- shr bp,1
- dec dx
- jne >L01
- lodsw
- mov bp,ax
- mov dl,16
-L01:
-#EM
+STARTIP  equ 0x00
+STARTCS  equ 0x02
+STARTSP  equ 0x04
+STARTSS  equ 0x06
+LENLZ    equ 0x08
+DECALAGE equ 0x0a
+LENPROG  equ 0x0c
 
+%macro GETBIT 0
+    shr bp, 1
+    dec dx
+    jnz %%done
+    lodsw
+    mov bp, ax
+    mov dl, 16
+%%done:
+%endmacro
 
-; d‚but en offset 000Eh
- org 0Eh
-
- push es
- push cs
- pop ds
- mov cx,LENPROG
- mov si,cx
- dec si
- mov di,si
- mov bx,ds
- add bx,DECALAGE
- mov es,bx
- std
- rep movsb
- push bx
- mov ax,offset SUITE
- push ax
- retf
+    push ax                    ; 0.91e preserves DOS entry AX
+    push es
+    push cs
+    pop ds
+    mov cx, [LENPROG]
+    db 0x8b, 0xf1              ; mov si,cx (A86 encoding)
+    dec si
+    mov di, si
+    mov bx, ds
+    add bx, [DECALAGE]
+    mov es, bx
+    std
+    rep movsb
+    push bx
+    mov ax, SUITE
+    push ax
+    retf
 
 SUITE:
-; d‚placement du code LZ vers le haut de la RAM
- cs mov bp,LENLZ
- mov dx,ds
+    mov bp, [cs:LENLZ]
+    mov dx, ds
 DEPL10:
- mov ax,bp
- cmp ax,1000h
- jbe DEPL05
- mov ax,1000h
+    mov ax, bp
+    cmp ax, 0x1000
+    jbe DEPL05
+    mov ax, 0x1000
 DEPL05:
- sub bp,ax
- sub dx,ax
- sub bx,ax
- mov ds,dx
- mov es,bx
- mov cl,3
- shl ax,cl
- mov cx,ax
- shl ax,1
- dec ax
- dec ax
- mov si,ax
- mov di,ax
- rep movsw
- or bp,bp
- jne DEPL10
+    sub bp, ax
+    sub dx, ax
+    sub bx, ax
+    mov ds, dx
+    mov es, bx
+    mov cl, 3
+    shl ax, cl
+    mov cx, ax
+    shl ax, 1
+    dec ax
+    dec ax
+    mov si, ax
+    mov di, ax
+    rep movsw
+    or bp, bp
+    jne DEPL10
 
-
-; d‚but du d‚compactage
- cld
- mov es,dx
- mov ds,bx
- xor si,si
- xor di,di
- mov dx,16
- lodsw
- mov bp,ax
-
+    cld
+    mov es, dx
+    mov ds, bx
+    xor si, si
+    xor di, di
+    mov dx, 16
+    lodsw
+    mov bp, ax
 DECOMP10:
- GetBit
- jnc DECOMP20
-; pour les tests
-; lodsb
-; mov ah,0
-; cs sub CRC2,ax
-; cs inc SIZE
-; stosb
- movsb
- jmp DECOMP10
-
-; lecture dans le buffer
+    GETBIT
+    jnc DECOMP20
+    movsb
+    jmp DECOMP10
 DECOMP20:
- xor cx,cx
- GetBit
- jc decomp30
-; adresse sur 1 octet
- GetBit
- rcl cx,1
- GetBit
- rcl cx,1
- inc cx
- inc cx
- lodsb
- mov bh,0FFh
- mov bl,al
- jmp DECOMP40
-; adresse sur 2 octets
+    xor cx, cx
+    GETBIT
+    jc DECOMP30
+    GETBIT
+    rcl cx, 1
+    GETBIT
+    rcl cx, 1
+    inc cx
+    inc cx
+    lodsb
+    mov bh, 0xff
+    mov bl, al
+    jmp DECOMP40
 DECOMP30:
- lodsw
- mov bx,ax
- mov cl,3
- shr bh,cl
- or bh,0E0h
- and ah,7
- je DECOMP39
- mov cl,ah
- inc cx
- inc cx
+    lodsw
+    mov bx, ax
+    mov cl, 3
+    shr bh, cl
+    or bh, 0xe0
+    and ah, 7
+    jz DECOMP39
+    mov cl, ah
+    inc cx
+    inc cx
 DECOMP40:
- es mov al,[bx+di]
-; pour les tests
-; mov ah,0
-; cs sub CRC2,ax
-; cs inc SIZE
- stosb
- loop DECOMP40
- jmp DECOMP10
-
-; adresse sur 3 octets
+    mov al, [es:bx+di]
+    stosb
+    loop DECOMP40
+    jmp DECOMP10
 DECOMP39:
- lodsb
- or al,al
- je FINDCMP
- cmp al,1
- je decomp50
- mov cl,al
- inc cx
- jmp DECOMP40
-
-; mise … jour de es:di et ds:si
+    lodsb
+    or al, al
+    jz FINDCMP
+    cmp al, 1
+    je DECOMP50
+    mov cl, al
+    inc cx
+    jmp DECOMP40
 DECOMP50:
- mov bx,di
- and di,000Fh
- add di,2000h
- mov cl,4
- shr bx,cl
- mov ax,es
- add ax,bx
- sub ax,200h
- mov es,ax
+    mov bx, di
+    and di, 0x000f
+    add di, 0x2000
+    mov cl, 4
+    shr bx, cl
+    mov ax, es
+    add ax, bx
+    sub ax, 0x0200
+    mov es, ax
+    mov bx, si
+    and si, 0x000f
+    shr bx, cl
+    mov ax, ds
+    add ax, bx
+    mov ds, ax
+    jmp DECOMP10
 
- mov bx,si
- and si,000Fh
- shr bx,cl
- mov ax,ds
- add ax,bx
- mov ds,ax
-
- jmp decomp10
-
- DB '*FAB*'
-
-; d‚compactage de la table de relocation
+    db '*FAB*'
 FINDCMP:
- push cs
- pop ds
+    push cs
+    pop ds
 RELOC03:
- mov si,offset RELOC
- pop bx
- add bx,10h
- mov dx,bx
- xor di,di
+    mov si, RELOC
+    pop bx
+    add bx, 0x10
+    mov dx, bx
+    xor di, di
 RELOC04:
- lodsb
- or al,al
- je RELOC10
- mov ah,0
+    lodsb
+    or al, al
+    jz RELOC10
+    mov ah, 0
 RELOC07:
- add di,ax
- mov ax,di
- and di,000Fh
- mov cl,4
- shr ax,cl
- add dx,ax
- mov es,dx
- es add [di],bx
- jmp RELOC04
+    add di, ax
+    mov ax, di
+    and di, 0x000f
+    mov cl, 4
+    shr ax, cl
+    add dx, ax
+    mov es, dx
+    add [es:di], bx
+    jmp RELOC04
 RELOC10:
- lodsw
- or ax,ax
- jne RELOC15
- add dx,0FFFh
- mov es,dx
- jmp RELOC04
+    lodsw
+    or ax, ax
+    jnz RELOC15
+    add dx, 0x0fff
+    mov es, dx
+    jmp RELOC04
 RELOC15:
- cmp ax,1
- jne RELOC07
-
-; lancement du programme EXE
+    cmp ax, 1
+    jne RELOC07
 RELOC20:
- mov ax,bx
- mov di,STARTSP
- mov si,STARTSS
- add si,ax
- add STARTCS,ax
- sub ax,10h
- mov ds,ax
- mov es,ax
- xor bx,bx
- cli
- mov ss,si
- mov sp,di
- sti
- cs jmp far [BX]
-
+    mov ax, bx
+    mov di, [STARTSP]
+    mov si, [STARTSS]
+    add si, ax
+    add word [STARTCS], ax
+    sub ax, 0x10
+    mov ds, ax
+    mov es, ax
+    xor bx, bx
+    pop ax
+    mov ss, si
+    mov sp, di
+    nop
+    jmp far [cs:bx]
 RELOC:
-
-
-
